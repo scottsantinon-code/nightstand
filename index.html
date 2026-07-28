@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en-AU" data-theme="night">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Nightstand</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nightstand">
+<meta name="theme-color" content="#0e0e10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+  /* Critical: first painted pixel is already dark. Full styles in app.css. */
+  html { background: #0e0e10; }
+  body { margin: 0; background: #0e0e10; }
+  #app { opacity: 0; }
+  #app.ready { opacity: 1; }
+</style>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ Library ============ -->
+  <main id="library" class="view" hidden>
+    <header class="lib-header">
+      <h1>Nightstand</h1>
+    </header>
+    <div id="lib-cards"></div>
+    <nav class="lib-toolbar">
+      <button id="lib-highlights-btn" class="toolbtn">Highlights</button>
+      <button id="lib-search-btn" class="toolbtn">Search</button>
+      <button id="lib-settings-btn" class="toolbtn">Settings</button>
+    </nav>
+  </main>
+
+  <!-- ============ Reader ============ -->
+  <main id="reader" class="view" hidden>
+    <header id="topbar" class="chrome-bar top">
+      <button id="back-btn" class="barbtn" aria-label="Back to library">&#8249; Library</button>
+      <div id="paper-short" class="bar-title"></div>
+      <span class="bar-spacer"></span>
+    </header>
+
+    <article id="content"></article>
+
+    <nav id="bottombar" class="chrome-bar bottom">
+      <button id="contents-btn" class="barbtn">Contents</button>
+      <button id="reader-highlights-btn" class="barbtn">Highlights</button>
+      <button id="reader-search-btn" class="barbtn">Search</button>
+      <button id="reader-settings-btn" class="barbtn">Settings</button>
+    </nav>
+
+    <div id="scrubber" aria-hidden="true">
+      <div id="scrub-track">
+        <div id="scrub-fill"></div>
+        <div id="scrub-ticks"></div>
+        <div id="scrub-pips"></div>
+      </div>
+      <div id="scrub-label" hidden></div>
+    </div>
+  </main>
+
+  <!-- ============ Highlight bar ============ -->
+  <div id="hl-bar" hidden>
+    <div class="hl-tags">
+      <button class="hl-tagbtn" data-tag="steal">Steal</button>
+      <button class="hl-tagbtn" data-tag="disagree">Disagree</button>
+      <button class="hl-tagbtn" data-tag="question">Question</button>
+      <button class="hl-tagbtn" data-tag="key">Key</button>
+    </div>
+    <div class="hl-actions">
+      <button id="hl-note-btn">Note</button>
+      <button id="hl-copy-btn">Copy</button>
+      <button id="hl-delete-btn" hidden>Delete</button>
+    </div>
+    <textarea id="hl-note-field" rows="2" placeholder="Note" hidden></textarea>
+  </div>
+
+  <!-- ============ Sheets ============ -->
+  <div id="sheet-backdrop" hidden></div>
+  <div id="sheet" role="dialog" hidden>
+    <div class="sheet-grab"></div>
+    <div id="sheet-body"></div>
+  </div>
+
+  <!-- ============ Image viewer ============ -->
+  <div id="img-viewer" hidden><img id="img-viewer-img" alt=""></div>
+
+  <!-- ============ Screen dim overlay ============ -->
+  <div id="dim-overlay"></div>
+
+  <!-- ============ Toast ============ -->
+  <div id="toast" hidden></div>
+
+</div>
+<script src="app.js" defer></script>
+</body>
+</html>

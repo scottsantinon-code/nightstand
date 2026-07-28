@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "papers": [
+    { "id": "hutchins-1995", "file": "papers/hutchins-1995.md", "order": 1 },
+    { "id": "kahneman-klein-2009", "file": "papers/kahneman-klein-2009.md", "order": 2 },
+    { "id": "eisenberg-2008", "file": "papers/eisenberg-2008.md", "order": 3 },
+    { "id": "horsley-wiig", "file": "papers/horsley-wiig.md", "order": 4 }
+  ]
+}
