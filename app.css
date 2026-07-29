@@ -661,24 +661,30 @@ input[type="range"] {
   border-bottom: 1px solid var(--rule);
 }
 
-/* ---------- Highlight bar ---------- */
+/* ---------- Highlight bar ----------
+   Anchored to the bottom of the screen, away from the selection,
+   because iOS shows its own copy/translate callout beside selected
+   text and the two must never fight for the same space. */
 #hl-bar {
   position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   z-index: 60;
   background: var(--chrome-bg);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   border: 1px solid var(--rule);
-  border-radius: 12px;
-  padding: 6px;
+  border-radius: 14px;
+  padding: 8px;
   font-family: var(--sans);
   font-size: 13px;
-  max-width: calc(100vw - 24px);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 }
 .hl-tags { display: flex; gap: 4px; }
 .hl-tagbtn {
-  min-height: 40px;
+  flex: 1;
+  min-height: 44px;
   padding: 0 10px;
   border-radius: 8px;
   border-bottom: 3px solid;

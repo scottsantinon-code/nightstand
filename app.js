@@ -1050,10 +1050,10 @@ if (typeof document !== 'undefined') {
     if (!parts.length) { hideHlBar(); return; }
     pendingSelection = parts;
     editingHighlightId = null;
-    showHlBar(range.getBoundingClientRect(), false);
+    showHlBar(false);
   }
 
-  function showHlBar(rect, editMode) {
+  function showHlBar(editMode) {
     hlBar.hidden = false;
     $('#hl-delete-btn').hidden = !editMode;
     if (!editMode && document.activeElement !== noteField) {
@@ -1070,17 +1070,25 @@ if (typeof document !== 'undefined') {
         noteField.hidden = false;
       }
     }
-    requestAnimationFrame(() => {
-      const bh = hlBar.offsetHeight;
-      let top = rect.top - bh - 12;
-      if (top < 60) top = rect.bottom + 12;
-      hlBar.style.top = Math.max(10, Math.min(window.innerHeight - bh - 10, top)) + 'px';
-      hlBar.style.left = Math.max(12, Math.min(window.innerWidth - hlBar.offsetWidth - 12, rect.left)) + 'px';
-    });
+    liftAboveKeyboard();
+  }
+
+  /* The bar sits where the iOS keyboard appears, so shift it up while
+     the keyboard is open (dictating or typing a note). */
+  function liftAboveKeyboard() {
+    if (hlBar.hidden || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const covered = window.innerHeight - vv.height - vv.offsetTop;
+    hlBar.style.transform = covered > 40 ? 'translateY(-' + covered + 'px)' : '';
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', liftAboveKeyboard);
+    window.visualViewport.addEventListener('scroll', liftAboveKeyboard);
   }
 
   function hideHlBar() {
     hlBar.hidden = true;
+    hlBar.style.transform = '';
     pendingSelection = null;
     editingHighlightId = null;
     noteField.value = '';
@@ -1188,11 +1196,9 @@ if (typeof document !== 'undefined') {
   function openHighlightEditor(hid) {
     const hl = highlights.find(h => h.id === hid);
     if (!hl) return;
-    const marks = contentEl.querySelectorAll('mark.hl[data-hid="' + hid + '"]');
-    if (!marks.length) return;
     editingHighlightId = hid;
     pendingSelection = null;
-    showHlBar(marks[0].getBoundingClientRect(), true);
+    showHlBar(true);
   }
 
   document.addEventListener('click', (e) => {
