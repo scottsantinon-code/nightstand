@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""One-off: normalise PDF-converted markdown into Nightstand paper format.
+"""Normalise PDF-converted markdown into Nightstand paper format.
 
 Strips converter artifacts (standalone page numbers, page-break rules,
 repeated running heads, the filename H1) and writes proper front matter.
-Originals are left untouched; output goes to papers/<id>.md
+Raw sources live in sources/ and are left untouched; output goes to
+papers/<id>.md. Idempotent: rerunning changes nothing if inputs match.
 """
 import re
 from collections import Counter
@@ -56,6 +57,28 @@ PAPERS = [
         "note": "In-situ simulation in a real ICU, framed through resilient healthcare rather than error-hunting.",
         "drop_h1": ["Horsley Wiig"],
     },
+    {
+        "src": "bmj.l4185.full.md",
+        "id": "panagioti-2019",
+        "title": "Prevalence, Severity, and Nature of Preventable Patient Harm Across Medical Care Settings",
+        "authors": "Maria Panagioti et al.",
+        "year": "2019",
+        "short": "Panagioti 2019",
+        "citation": "Panagioti, M., Khan, K., Keers, R. N., et al. (2019). Prevalence, severity, and nature of preventable patient harm across medical care settings: systematic review and meta-analysis. BMJ, 366, l4185.",
+        "note": "The denominator: one patient in twenty preventably harmed, one in eight of those severely, and worst in intensive care.",
+        "drop_h1": ["bmj.l4185.full"],
+        # One-off BMJ page furniture the generic pass cannot catch
+        "drop_patterns": [
+            r"^OPEN ACCESS$",
+            r"^Check for updates$",
+            r"^BMJ: first published as ",
+            r"^No commercial reuse: ",
+            r"^Subscribe: ",
+        ],
+        # The reference list has no heading in the PDF conversion; give it
+        # one so the app can collapse it.
+        "insert_before": (r"^1\. de Vries EN", "## References\n"),
+    },
 ]
 
 
@@ -67,7 +90,7 @@ def strip_front_matter(text):
     return text
 
 
-def clean(text, drop_h1):
+def clean(text, drop_h1, drop_patterns=(), insert_before=None):
     text = strip_front_matter(text)
     lines = text.split("\n")
 
@@ -91,6 +114,11 @@ def clean(text, drop_h1):
             continue
         if s.startswith("# ") and s[2:].strip() in drop_h1:  # filename H1
             continue
+        if any(re.search(p, s) for p in drop_patterns):
+            continue
+        if insert_before and re.search(insert_before[0], s):
+            out.append(insert_before[1])
+            insert_before = None
         out.append(l)
 
     # Collapse runs of blank lines
@@ -99,8 +127,9 @@ def clean(text, drop_h1):
 
 
 for p in PAPERS:
-    src = ROOT / p["src"]
-    body, heads = clean(src.read_text(encoding="utf-8"), p["drop_h1"])
+    src = ROOT / "sources" / p["src"]
+    body, heads = clean(src.read_text(encoding="utf-8"), p["drop_h1"],
+                        p.get("drop_patterns", ()), p.get("insert_before"))
     fm = ["---",
           f'id: {p["id"]}',
           f'title: "{p["title"]}"',

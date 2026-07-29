@@ -4,7 +4,7 @@ A single-purpose offline PWA for reading academic papers on a phone, one-handed,
 
 ## Adding a paper
 
-1. Convert the paper to clean markdown (headings, paragraphs, footnotes as `[^1]`).
+1. Convert the paper to clean markdown (headings, paragraphs, footnotes as `[^1]`). Raw converter output goes in `sources/` (gitignored, stays local); either clean it by hand or add an entry to `tools/normalise_papers.py` and run it to strip page numbers, running heads and other PDF artifacts automatically.
 2. Add front matter at the top of the file:
 
    ```markdown
@@ -54,4 +54,4 @@ python3 -m http.server 8000
 
 Then open `http://localhost:8000/`. When iterating locally, hard-reload or bump `CACHE_VERSION`, because the service worker serves cached files first.
 
-`tools/` holds one-off scripts (paper normalisation, icon generation) and is not part of the deployed app.
+`tools/` holds helper scripts (paper normalisation, icon generation) and `sources/` holds raw converter output; neither is part of the deployed app.

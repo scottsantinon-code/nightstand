@@ -652,7 +652,8 @@ if (typeof document !== 'undefined') {
     ticks.innerHTML = '';
     pips.innerHTML = '';
     for (const h of currentPaper.headings) {
-      if (h.level !== 2) continue;
+      // PDF conversions are inconsistent about levels; treat h1 and h2 as sections
+      if (h.level > 2) continue;
       const el = document.getElementById(h.blockId);
       if (!el || el.classList.contains('refs-hidden')) continue;
       const tick = document.createElement('div');

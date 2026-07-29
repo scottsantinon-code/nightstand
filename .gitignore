@@ -1,6 +1,3 @@
 .DS_Store
-# Raw converter output; the app serves the normalised copies in papers/
-/Horsley Wiig.md
-/Hutchins 1995.md
-/Improving Healthcare Team Communication.md
-/kahneman-klein-2009.md
+# Raw converter output lives in sources/; the app serves the normalised copies in papers/
+/sources/
