@@ -1,6 +1,6 @@
 /* Nightstand service worker. Cache-first, everything precached.
    To ship an update: bump CACHE_VERSION, commit, push. */
-const CACHE_VERSION = 'nightstand-v4';
+const CACHE_VERSION = 'nightstand-v5';
 
 const SHELL = [
   './',

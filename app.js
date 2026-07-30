@@ -388,6 +388,9 @@ if (typeof document !== 'undefined') {
   const paperCache = {};    // id -> { fm, blocks, footnotes, headings }
   let currentPaper = null;  // parsed paper currently in reader
   let currentId = null;
+  let cardTopics = null;    // revision docs render as a deck of topic cards
+  let currentTopicIdx = 0;
+  let blockTopicMap = null; // blockId -> topic index
   let chromeTimer = null;
   let pendingRestore = null;  // { blockId, offset } applied until user scrolls
   let editingHighlightId = null;
@@ -462,7 +465,7 @@ if (typeof document !== 'undefined') {
     savePositionNow();
     releaseWakeLock();
     readerEl.hidden = true;
-    document.body.classList.remove('chrome-visible');
+    document.body.classList.remove('chrome-visible', 'card-mode');
     await renderLibrary();
     libraryEl.hidden = false;
     window.scrollTo(0, 0);
@@ -481,13 +484,36 @@ if (typeof document !== 'undefined') {
     document.body.classList.remove('chrome-visible');
     $('#paper-short').textContent = paper.fm.title || id;
     $('#shuffle-btn').hidden = paper.kind !== 'revision';
+    document.body.classList.toggle('card-mode', paper.kind === 'revision');
 
-    renderPaper(paper);
     reanchorHighlights(paper);
+    const pos = positions[id];
+
+    if (paper.kind === 'revision') {
+      buildCards(paper);
+      let idx = 0;
+      if (opts && opts.resume && pos && pos.blockId && blockTopicMap[pos.blockId] !== undefined) {
+        idx = blockTopicMap[pos.blockId];
+      }
+      renderCard(idx);
+      if (opts && opts.resume && pos && pos.blockId) {
+        pendingRestore = { blockId: pos.blockId, offset: pos.offset || 0 };
+        restorePosition(pendingRestore);
+      } else if (opts && opts.toBlock) {
+        pendingRestore = null;
+        jumpToBlock(opts.toBlock, true);
+      }
+      updateScrubber();
+      updateWakeLock();
+      return;
+    }
+
+    cardTopics = null;
+    blockTopicMap = null;
+    renderPaper(paper);
     applyAllHighlights();
     buildScrubberMarks();
 
-    const pos = positions[id];
     if (opts && opts.resume && pos && pos.blockId) {
       pendingRestore = { blockId: pos.blockId, offset: pos.offset || 0 };
       restorePosition(pendingRestore);
@@ -501,6 +527,156 @@ if (typeof document !== 'undefined') {
     updateScrubber();
     updateWakeLock();
   }
+
+  /* ---------- Revision card deck ---------- */
+  function buildCards(paper) {
+    const rough = [];
+    let category = '';
+    let cur = null;
+    for (const b of paper.blocks) {
+      if (b.type === 'h' && b.level === 1) {
+        category = b.heading;
+        cur = { category: '', title: b.heading, headingId: b.id, blocks: [] };
+        rough.push(cur);
+        continue;
+      }
+      if (b.type === 'h' && b.level === 2) {
+        cur = { category, title: b.heading, headingId: b.id, blocks: [] };
+        rough.push(cur);
+        continue;
+      }
+      if (!cur) {
+        cur = { category: '', title: paper.fm.title || '', headingId: null, blocks: [] };
+        rough.push(cur);
+      }
+      cur.blocks.push(b);
+    }
+    // topics with h3 sub-structure become one card per h3: the most
+    // specific topic is the flashcard
+    const topics = [];
+    for (const t of rough) {
+      const h3s = t.blocks.filter(b => b.type === 'h' && b.level === 3);
+      if (!h3s.length) { topics.push(t); continue; }
+      let sub = { category: t.category, title: t.title, headingId: t.headingId, blocks: [] };
+      topics.push(sub);
+      const crumb = (t.category ? t.category + ' › ' : '') + t.title;
+      for (const b of t.blocks) {
+        if (b.type === 'h' && b.level === 3) {
+          sub = { category: crumb, title: b.heading, headingId: b.id, blocks: [] };
+          topics.push(sub);
+          continue;
+        }
+        sub.blocks.push(b);
+      }
+    }
+    cardTopics = topics.filter(t => t.blocks.length > 0);
+    blockTopicMap = {};
+    cardTopics.forEach((t, i) => {
+      if (t.headingId) blockTopicMap[t.headingId] = i;
+      for (const b of t.blocks) blockTopicMap[b.id] = i;
+    });
+    // headings whose topics were filtered out (empty categories) map to
+    // the next card so contents taps always land somewhere
+    for (const h of paper.headings) {
+      if (blockTopicMap[h.blockId] !== undefined) continue;
+      const hi = parseInt(h.blockId.slice(1), 10);
+      let best = 0;
+      for (let i = 0; i < cardTopics.length; i++) {
+        const first = cardTopics[i].blocks[0];
+        if (parseInt(first.id.slice(1), 10) >= hi) { best = i; break; }
+      }
+      blockTopicMap[h.blockId] = best;
+    }
+  }
+
+  const REF_TABLE_CHARS = 400; // tables larger than this are reference, not key points
+
+  function renderCard(idx) {
+    if (!cardTopics || !cardTopics.length) return;
+    currentTopicIdx = ((idx % cardTopics.length) + cardTopics.length) % cardTopics.length;
+    const t = cardTopics[currentTopicIdx];
+
+    contentEl.innerHTML = '';
+    const head = document.createElement('header');
+    head.className = 'topic-head';
+    head.innerHTML =
+      (t.category ? '<div class="topic-eyebrow">' + escapeHtml(t.category) + '</div>' : '') +
+      '<h1 class="topic-title">' + escapeHtml(t.title) + '</h1>';
+    contentEl.appendChild(head);
+
+    const scratch = document.createElement('div');
+    for (const b of t.blocks) {
+      const div = document.createElement('div');
+      div.className = 'block';
+      div.id = b.id;
+      if (b.type === 'htable' || b.type === 'table') {
+        scratch.innerHTML = b.html;
+        if (scratch.textContent.trim().length > REF_TABLE_CHARS) {
+          // toggle row lives OUTSIDE the block so the block's text content
+          // stays pristine for highlight offsets
+          const row = document.createElement('div');
+          row.className = 'ref-toggle-row';
+          row.innerHTML = '<button class="ref-table-toggle"><span class="chev">&#9656;</span>Reference table</button>';
+          div.classList.add('ref-collapsed');
+          div.innerHTML = b.html;
+          row.querySelector('button').addEventListener('click', (e) => {
+            const btn = e.currentTarget;
+            btn.classList.toggle('open');
+            div.classList.toggle('ref-collapsed', !btn.classList.contains('open'));
+          });
+          contentEl.appendChild(row);
+          contentEl.appendChild(div);
+          continue;
+        }
+      }
+      div.innerHTML = b.html;
+      contentEl.appendChild(div);
+    }
+
+    $('#paper-short').textContent = t.title;
+    applyAllHighlights();
+    buildScrubberMarks();
+    window.scrollTo(0, 0);
+    savePositionNow();
+  }
+
+  function stepCard(delta) {
+    const el = contentEl;
+    const go = () => {
+      renderCard(currentTopicIdx + delta);
+      el.classList.remove('card-leave-left', 'card-leave-right');
+      el.classList.add(delta > 0 ? 'card-enter-right' : 'card-enter-left');
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        el.classList.remove('card-enter-right', 'card-enter-left');
+      }));
+    };
+    el.classList.add(delta > 0 ? 'card-leave-left' : 'card-leave-right');
+    setTimeout(go, 130);
+  }
+
+  /* Horizontal swipe moves through the deck (revision docs only) */
+  let cardSwipe = null;
+  contentEl.addEventListener('touchstart', (e) => {
+    if (!cardTopics || !readerVisible()) return;
+    const t = e.touches[0];
+    // leave the left edge for back-to-library, tables scroll sideways themselves
+    if (t.clientX < 30 || e.target.closest('table')) { cardSwipe = null; return; }
+    cardSwipe = { x: t.clientX, y: t.clientY, dx: 0, dy: 0 };
+  }, { passive: true });
+  contentEl.addEventListener('touchmove', (e) => {
+    if (!cardSwipe) return;
+    const t = e.touches[0];
+    cardSwipe.dx = t.clientX - cardSwipe.x;
+    cardSwipe.dy = t.clientY - cardSwipe.y;
+  }, { passive: true });
+  contentEl.addEventListener('touchend', () => {
+    if (!cardSwipe) return;
+    const { dx, dy } = cardSwipe;
+    cardSwipe = null;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    if (Math.abs(dx) > 60 && Math.abs(dy) < 50) stepCard(dx < 0 ? 1 : -1);
+  }, { passive: true });
 
   /* ---------- Paper rendering ---------- */
   function renderPaper(paper) {
@@ -575,6 +751,7 @@ if (typeof document !== 'undefined') {
     const blocksEls = contentEl.children;
     for (let i = 0; i < blocksEls.length; i++) {
       const el = blocksEls[i];
+      if (!el.classList.contains('block')) continue;
       if (el.classList.contains('refs-hidden')) continue;
       const top = el.offsetTop;
       const h = el.offsetHeight || 1;
@@ -582,8 +759,10 @@ if (typeof document !== 'undefined') {
         return { blockId: el.id, offset: Math.max(0, Math.min(1, (y - top) / h)) };
       }
     }
-    const lastEl = blocksEls[blocksEls.length - 1];
-    return lastEl ? { blockId: lastEl.id, offset: 1 } : null;
+    for (let i = blocksEls.length - 1; i >= 0; i--) {
+      if (blocksEls[i].classList.contains('block')) return { blockId: blocksEls[i].id, offset: 1 };
+    }
+    return null;
   }
 
   function restorePosition(pos) {
@@ -749,7 +928,7 @@ if (typeof document !== 'undefined') {
     for (const hl of highlights) {
       if (hl.paperId !== currentId || hl.orphaned) continue;
       const el = document.getElementById(hl.blockId);
-      if (!el || el.classList.contains('refs-hidden')) continue;
+      if (!el || el.classList.contains('refs-hidden') || el.classList.contains('ref-collapsed')) continue;
       const pip = document.createElement('div');
       pip.className = 'pip pip-' + hl.tag;
       pip.style.top = ((el.offsetTop / total) * 100) + '%';
@@ -757,19 +936,25 @@ if (typeof document !== 'undefined') {
     }
   }
 
-  /* Revision doc only: jump somewhere else, like cutting a deck */
+  /* Revision doc only: deal a random card from the deck */
   function shuffleSection() {
-    if (!currentPaper) return;
-    const here = sectionNameAt(window.scrollY);
-    const candidates = currentPaper.headings.filter(h => h.level <= 2 && h.text !== here);
-    if (!candidates.length) return;
-    const pick = candidates[Math.floor(Math.random() * candidates.length)];
-    jumpToBlock(pick.blockId, true);
+    if (!cardTopics || cardTopics.length < 2) return;
+    let idx = currentTopicIdx;
+    while (idx === currentTopicIdx) idx = Math.floor(Math.random() * cardTopics.length);
+    const el = contentEl;
+    el.classList.add('card-leave-left');
+    setTimeout(() => {
+      renderCard(idx);
+      el.classList.remove('card-leave-left');
+      el.classList.add('card-enter-right');
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('card-enter-right')));
+    }, 130);
     hideChrome();
   }
 
   function sectionNameAt(scrollTop) {
     if (!currentPaper) return '';
+    if (cardTopics) return cardTopics[currentTopicIdx].title;
     const y = scrollTop + window.innerHeight * ANCHOR_FRACTION;
     let name = currentPaper.fm.title || '';
     for (const h of currentPaper.headings) {
@@ -1010,9 +1195,18 @@ if (typeof document !== 'undefined') {
   }
 
   function jumpToBlock(blockId, flash) {
+    if (cardTopics) {
+      const idx = blockTopicMap[blockId];
+      if (idx !== undefined && idx !== currentTopicIdx) renderCard(idx);
+    }
     expandRefsIfNeeded(blockId);
     const el = document.getElementById(blockId);
-    if (!el) return;
+    if (!el) { window.scrollTo(0, 0); return; }
+    // the block may be a collapsed reference table; open it before scrolling
+    if (el.classList.contains('ref-collapsed')) {
+      const btn = el.previousElementSibling && el.previousElementSibling.querySelector('.ref-table-toggle');
+      if (btn) btn.click();
+    }
     window.scrollTo(0, Math.max(0, el.offsetTop - window.innerHeight * 0.15));
     if (flash) {
       el.classList.add('flash');

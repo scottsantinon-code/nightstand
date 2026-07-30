@@ -233,6 +233,58 @@ mark.doc-mark {
 #content .block table ul, #content .block table ol { margin: 0 0 0.35em; padding-left: 1.1em; }
 #content .block table img { max-width: 100%; height: auto; }
 
+/* ---------- Revision card deck ---------- */
+body.card-mode #content {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 22vh);
+  min-height: 70vh;
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+#content.card-leave-left { transform: translateX(-26px); opacity: 0; }
+#content.card-leave-right { transform: translateX(26px); opacity: 0; }
+#content.card-enter-right { transform: translateX(26px); opacity: 0; transition: none; }
+#content.card-enter-left { transform: translateX(-26px); opacity: 0; transition: none; }
+
+.topic-head {
+  margin: 0 0 1.2em;
+  padding-bottom: 0.8em;
+  border-bottom: 1px solid var(--rule);
+}
+.topic-eyebrow {
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.topic-title {
+  font-family: var(--serif);
+  font-size: 1.5em;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.block.ref-collapsed { display: none; }
+
+.ref-table-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--muted);
+  border: 1px dashed var(--rule);
+  border-radius: 10px;
+  padding: 0 12px;
+  margin: 0.6em 0;
+}
+.ref-table-toggle .chev { transition: transform 180ms ease; font-size: 0.9em; }
+.ref-table-toggle.open .chev { transform: rotate(90deg); }
+
 /* Search-jump flash */
 .block.flash { animation: flash 1.2s ease-out 1; }
 @keyframes flash {
