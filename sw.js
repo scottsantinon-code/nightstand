@@ -1,6 +1,6 @@
 /* Nightstand service worker. Cache-first, everything precached.
    To ship an update: bump CACHE_VERSION, commit, push. */
-const CACHE_VERSION = 'nightstand-v3';
+const CACHE_VERSION = 'nightstand-v4';
 
 const SHELL = [
   './',
@@ -25,6 +25,10 @@ self.addEventListener('install', (event) => {
       const manifest = await res.clone().json();
       const files = (manifest.papers || []).map(p => p.file);
       await cache.addAll(files);
+      // asset lists (revision doc images) cached individually so one
+      // missing file cannot fail the whole install
+      const assets = (manifest.papers || []).flatMap(p => p.assets || []);
+      await Promise.all(assets.map(a => cache.add(a).catch(() => null)));
     } catch (e) { /* papers fetched lazily if precache fails */ }
   })());
 });

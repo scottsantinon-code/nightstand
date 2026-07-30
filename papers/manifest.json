@@ -1,10 +1,75 @@
 {
   "version": 1,
   "papers": [
-    { "id": "hutchins-1995", "file": "papers/hutchins-1995.md", "order": 1 },
-    { "id": "kahneman-klein-2009", "file": "papers/kahneman-klein-2009.md", "order": 2 },
-    { "id": "eisenberg-2008", "file": "papers/eisenberg-2008.md", "order": 3 },
-    { "id": "horsley-wiig", "file": "papers/horsley-wiig.md", "order": 4 },
-    { "id": "panagioti-2019", "file": "papers/panagioti-2019.md", "order": 5 }
+    {
+      "id": "revision",
+      "file": "papers/revision.md",
+      "order": 0,
+      "kind": "revision",
+      "assets": [
+        "papers/revision-media/image1.png",
+        "papers/revision-media/image10.jpeg",
+        "papers/revision-media/image11.png",
+        "papers/revision-media/image12.png",
+        "papers/revision-media/image13.png",
+        "papers/revision-media/image14.png",
+        "papers/revision-media/image15.png",
+        "papers/revision-media/image16.png",
+        "papers/revision-media/image17.png",
+        "papers/revision-media/image18.png",
+        "papers/revision-media/image19.png",
+        "papers/revision-media/image2.png",
+        "papers/revision-media/image20.png",
+        "papers/revision-media/image21.png",
+        "papers/revision-media/image22.png",
+        "papers/revision-media/image23.png",
+        "papers/revision-media/image24.png",
+        "papers/revision-media/image25.png",
+        "papers/revision-media/image26.png",
+        "papers/revision-media/image27.jpg",
+        "papers/revision-media/image28.jpg",
+        "papers/revision-media/image29.jpg",
+        "papers/revision-media/image3.png",
+        "papers/revision-media/image30.png",
+        "papers/revision-media/image31.png",
+        "papers/revision-media/image32.png",
+        "papers/revision-media/image33.png",
+        "papers/revision-media/image34.png",
+        "papers/revision-media/image35.png",
+        "papers/revision-media/image36.png",
+        "papers/revision-media/image37.png",
+        "papers/revision-media/image4.png",
+        "papers/revision-media/image5.png",
+        "papers/revision-media/image6.png",
+        "papers/revision-media/image7.png",
+        "papers/revision-media/image8.png",
+        "papers/revision-media/image9.png"
+      ]
+    },
+    {
+      "id": "hutchins-1995",
+      "file": "papers/hutchins-1995.md",
+      "order": 1
+    },
+    {
+      "id": "kahneman-klein-2009",
+      "file": "papers/kahneman-klein-2009.md",
+      "order": 2
+    },
+    {
+      "id": "eisenberg-2008",
+      "file": "papers/eisenberg-2008.md",
+      "order": 3
+    },
+    {
+      "id": "horsley-wiig",
+      "file": "papers/horsley-wiig.md",
+      "order": 4
+    },
+    {
+      "id": "panagioti-2019",
+      "file": "papers/panagioti-2019.md",
+      "order": 5
+    }
   ]
 }

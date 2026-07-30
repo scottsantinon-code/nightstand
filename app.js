@@ -109,6 +109,9 @@ function renderInline(text) {
   // links
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g,
     (m, label, href) => put('<a href="' + href + '" target="_blank" rel="noopener">' + label + '</a>'));
+  // document marks (Word highlighter, ==text==) and superscripts (^x^)
+  s = s.replace(/==([^=\n]+)==/g, '<mark class="doc-mark">$1</mark>');
+  s = s.replace(/\^([^\s^]{1,6})\^/g, '<sup>$1</sup>');
   // bold then italic
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
@@ -117,6 +120,36 @@ function renderInline(text) {
 
   s = s.replace(/\u0000(\d+)\u0000/g, (m, i) => stash[+i]);
   return s;
+}
+
+/* Raw HTML blocks (Word tables from the revision doc) pass through a
+   whitelist: unknown tags are stripped, attributes reduced to the safe
+   essentials. Content is same-origin and author-controlled; this keeps
+   the DOM tidy rather than defending against an adversary. */
+function sanitizeHtmlBlock(html) {
+  const ALLOWED = new Set(['table', 'thead', 'tbody', 'tr', 'td', 'th', 'p', 'ul', 'ol', 'li',
+    'strong', 'em', 'b', 'i', 'u', 'sup', 'sub', 'mark', 'br', 'img', 'a', 'blockquote', 'hr', 'span']);
+  html = html.replace(/<!--[\s\S]*?-->/g, '');
+  return html.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g, (m, tag, attrs) => {
+    tag = tag.toLowerCase();
+    if (!ALLOWED.has(tag)) return '';
+    if (m.startsWith('</')) return '</' + tag + '>';
+    let keep = '';
+    if (tag === 'img') {
+      const src = attrs.match(/src="([^"]*)"/);
+      if (!src) return '';
+      keep = ' src="' + src[1] + '" loading="lazy"';
+    } else if (tag === 'a') {
+      const href = attrs.match(/href="([^"]*)"/);
+      if (href && /^https?:/.test(href[1])) keep = ' href="' + href[1] + '" target="_blank" rel="noopener"';
+    } else if (tag === 'td' || tag === 'th') {
+      const cs = attrs.match(/colspan="(\d+)"/);
+      const rs = attrs.match(/rowspan="(\d+)"/);
+      if (cs) keep += ' colspan="' + cs[1] + '"';
+      if (rs) keep += ' rowspan="' + rs[1] + '"';
+    }
+    return '<' + tag + keep + '>';
+  });
 }
 
 /* Block-level parse. Returns { blocks, footnotes, headings }.
@@ -147,6 +180,19 @@ function parseMarkdown(md) {
     const t = line.trim();
 
     if (!t) { flushPara(); i++; continue; }
+
+    // raw HTML table (Word tables survive as sanitised HTML)
+    if (t.startsWith('<table')) {
+      flushPara();
+      const buf = [];
+      while (i < lines.length) {
+        buf.push(lines[i]);
+        if (lines[i].includes('</table>')) { i++; break; }
+        i++;
+      }
+      push('htable', sanitizeHtmlBlock(buf.join('\n')));
+      continue;
+    }
 
     // fenced code
     if (t.startsWith('```')) {
@@ -209,8 +255,16 @@ function parseMarkdown(md) {
       const rows = [];
       while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(lines[i].trim()); i++; }
       const cells = r => r.replace(/^\||\|$/g, '').split('|').map(c => renderInline(c.trim()));
-      let html = '<table><thead><tr>' + cells(rows[0]).map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>';
-      for (let r = 2; r < rows.length; r++) {
+      // Word exports headerless tables with an empty first row; promote
+      // the first data row to the header in that case
+      let head = cells(rows[0]);
+      let bodyFrom = 2;
+      if (head.every(c => !c) && rows.length > 2) {
+        head = cells(rows[2]);
+        bodyFrom = 3;
+      }
+      let html = '<table><thead><tr>' + head.map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>';
+      for (let r = bodyFrom; r < rows.length; r++) {
         html += '<tr>' + cells(rows[r]).map(c => '<td>' + c + '</td>').join('') + '</tr>';
       }
       html += '</tbody></table>';
@@ -218,21 +272,47 @@ function parseMarkdown(md) {
       continue;
     }
 
-    // list
-    const listStart = t.match(/^([-*+]|\d+[.)])\s+/);
-    if (listStart) {
+    // list: supports nesting by indentation and blank lines between items
+    const itemRe = /^(\s*)([-*+]|(\d+)[.)])\s+(.*)$/;
+    if (itemRe.test(line) && !line.match(/^\s{4,}/)) {
       flushPara();
-      const ordered = /^\d/.test(t);
-      const items = [];
+      const items = []; // { depth, ordered, text }
       while (i < lines.length) {
-        const lt = lines[i].trim();
-        const im = lt.match(/^([-*+]|\d+[.)])\s+(.*)$/);
-        if (im && /^\d/.test(lt) === ordered) { items.push(im[2]); i++; }
-        else if (lt && /^\s{2,}/.test(lines[i]) && items.length) { items[items.length - 1] += ' ' + lt; i++; }
-        else break;
+        const raw = lines[i];
+        if (!raw.trim()) {
+          // blank line: the list continues if the next content is an item
+          let j = i + 1;
+          while (j < lines.length && !lines[j].trim()) j++;
+          if (j < lines.length && itemRe.test(lines[j])) { i = j; continue; }
+          break;
+        }
+        const m = raw.match(itemRe);
+        if (m) {
+          const indent = m[1].replace(/\t/g, '  ').length;
+          items.push({ depth: Math.floor(indent / 2), ordered: m[3] !== undefined, text: m[4] });
+          i++;
+        } else if (/^\s{2,}/.test(raw) && items.length) {
+          items[items.length - 1].text += ' ' + raw.trim();
+          i++;
+        } else break;
       }
-      const tag = ordered ? 'ol' : 'ul';
-      push('list', '<' + tag + '>' + items.map(it => '<li>' + renderInline(it) + '</li>').join('') + '</' + tag + '>');
+      // build nested lists from depths
+      let html = '';
+      const stack = [];
+      for (const it of items) {
+        while (stack.length && it.depth < stack[stack.length - 1].depth) {
+          html += '</li></' + stack.pop().tag + '>';
+        }
+        if (stack.length && it.depth === stack[stack.length - 1].depth) {
+          html += '</li><li>' + renderInline(it.text);
+        } else {
+          const tag = it.ordered ? 'ol' : 'ul';
+          html += '<' + tag + '><li>' + renderInline(it.text);
+          stack.push({ depth: it.depth, tag });
+        }
+      }
+      while (stack.length) html += '</li></' + stack.pop().tag + '>';
+      push('list', html);
       continue;
     }
 
@@ -344,7 +424,7 @@ if (typeof document !== 'undefined') {
       const text = await res.text();
       const { fm, body } = parseFrontMatter(text);
       const parsed = parseMarkdown(body);
-      paperCache[id] = { id, fm, blocks: parsed.blocks, footnotes: parsed.footnotes, headings: parsed.headings };
+      paperCache[id] = { id, fm, kind: entry.kind || 'paper', blocks: parsed.blocks, footnotes: parsed.footnotes, headings: parsed.headings };
       return paperCache[id];
     } catch (e) {
       return null;
@@ -400,6 +480,7 @@ if (typeof document !== 'undefined') {
     readerEl.hidden = false;
     document.body.classList.remove('chrome-visible');
     $('#paper-short').textContent = paper.fm.title || id;
+    $('#shuffle-btn').hidden = paper.kind !== 'revision';
 
     renderPaper(paper);
     reanchorHighlights(paper);
@@ -587,8 +668,8 @@ if (typeof document !== 'undefined') {
       openFootnote(id);
       return;
     }
-    if (t.closest('figure img')) {
-      openImageViewer(t.closest('figure img'));
+    if (t.closest('img')) {
+      openImageViewer(t.closest('img'));
       return;
     }
     if (t.closest('mark.hl')) {
@@ -607,6 +688,7 @@ if (typeof document !== 'undefined') {
   /* Bar buttons */
   $('#back-btn').addEventListener('click', showLibrary);
   $('#contents-btn').addEventListener('click', openContents);
+  $('#shuffle-btn').addEventListener('click', shuffleSection);
   $('#reader-highlights-btn').addEventListener('click', () => openHighlightsView(currentId));
   $('#reader-search-btn').addEventListener('click', () => openSearch(currentId));
   $('#reader-settings-btn').addEventListener('click', openSettings);
@@ -651,9 +733,12 @@ if (typeof document !== 'undefined') {
     const pips = $('#scrub-pips');
     ticks.innerHTML = '';
     pips.innerHTML = '';
+    // Treat h1 and h2 as sections, but back off to h1 only when a document
+    // has so many sections the ticks would blur into a stripe
+    const sectionCount = currentPaper.headings.filter(h => h.level <= 2).length;
+    const tickLevel = sectionCount > 40 ? 1 : 2;
     for (const h of currentPaper.headings) {
-      // PDF conversions are inconsistent about levels; treat h1 and h2 as sections
-      if (h.level > 2) continue;
+      if (h.level > tickLevel) continue;
       const el = document.getElementById(h.blockId);
       if (!el || el.classList.contains('refs-hidden')) continue;
       const tick = document.createElement('div');
@@ -670,6 +755,17 @@ if (typeof document !== 'undefined') {
       pip.style.top = ((el.offsetTop / total) * 100) + '%';
       pips.appendChild(pip);
     }
+  }
+
+  /* Revision doc only: jump somewhere else, like cutting a deck */
+  function shuffleSection() {
+    if (!currentPaper) return;
+    const here = sectionNameAt(window.scrollY);
+    const candidates = currentPaper.headings.filter(h => h.level <= 2 && h.text !== here);
+    if (!candidates.length) return;
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    jumpToBlock(pick.blockId, true);
+    hideChrome();
   }
 
   function sectionNameAt(scrollTop) {
@@ -730,10 +826,32 @@ if (typeof document !== 'undefined') {
   }
 
   async function renderLibrary() {
-    const papers = await loadAllPapers();
+    const all = await loadAllPapers();
     const cardsEl = $('#lib-cards');
     cardsEl.innerHTML = '';
 
+    // Revision documents pin above the reading stack: no progress, no
+    // finished state, because revision is never done and never owed.
+    for (const p of all.filter(x => x.kind === 'revision')) {
+      const pos = positions[p.id] || {};
+      const count = highlights.filter(h => h.paperId === p.id).length;
+      const card = document.createElement('div');
+      card.className = 'card card-revision';
+      card.setAttribute('role', 'button');
+      const footer = [];
+      if (count) footer.push(count + (count === 1 ? ' highlight' : ' highlights'));
+      if (pos.updatedAt) footer.push('Last revised ' + relTime(pos.updatedAt));
+      card.innerHTML =
+        '<div class="card-eyebrow">Revision</div>' +
+        '<div class="card-title">' + escapeHtml(p.fm.title || p.id) + '</div>' +
+        (p.fm.note ? '<div class="card-note">' + escapeHtml(p.fm.note) + '</div>' : '') +
+        (footer.length ? '<div class="card-footer">' + footer.map(escapeHtml).join('<span>&#183;</span>') + '</div>' : '');
+      card.addEventListener('click', () => openPaper(p.id, { resume: true }));
+      attachLongPress(card, () => openRevisionMenu(p));
+      cardsEl.appendChild(card);
+    }
+
+    const papers = all.filter(x => x.kind !== 'revision');
     const state = (p) => {
       const pos = positions[p.id];
       if (pos && pos.finished) return 2;
@@ -785,6 +903,25 @@ if (typeof document !== 'undefined') {
       if (fired) { e.preventDefault(); }
     });
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); fn(); });
+  }
+
+  function openRevisionMenu(p) {
+    openSheet(
+      '<div class="sheet-title">' + escapeHtml(p.fm.title || p.id) + '</div>' +
+      '<button class="menu-item" data-act="reset">Reset position</button>' +
+      '<button class="menu-item" data-act="hls">View highlights</button>'
+    );
+    $('#sheet-body').addEventListener('click', (e) => {
+      const act = e.target.dataset && e.target.dataset.act;
+      if (act === 'reset') {
+        delete positions[p.id];
+        persistPositions();
+        closeSheet();
+        renderLibrary();
+      } else if (act === 'hls') {
+        openHighlightsView(p.id);
+      }
+    });
   }
 
   function openCardMenu(p) {

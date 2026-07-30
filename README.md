@@ -32,6 +32,16 @@ A single-purpose offline PWA for reading academic papers on a phone, one-handed,
 
 That is the whole workflow. Nothing else to run.
 
+## Updating the revision document
+
+The Regular Revision doc lives in Google Drive as a Word file. When you have edited it:
+
+```
+python3 tools/import_revision.py
+```
+
+Then bump `CACHE_VERSION` in `sw.js`, commit, push. The script converts the docx with pandoc, keeps your Word highlighter marks (they render as marks in the app), carries tables and images across, and refreshes the image list the service worker precaches. Highlights you made in the app re-anchor themselves by text search after an update; anything whose text was deleted from the doc is kept and shown as orphaned rather than lost.
+
 ## Installing on an iPhone
 
 1. Open the site in Safari.
